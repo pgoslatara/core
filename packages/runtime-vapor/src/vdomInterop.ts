@@ -45,6 +45,7 @@ import {
   VaporComponentInstance,
   createComponent,
   getCurrentScopeId,
+  getRootElement,
   mountComponent,
   unmountComponent,
 } from './component'
@@ -155,6 +156,15 @@ const vaporInteropImpl: Omit<
     }
 
     mountComponent(instance, container, selfAnchor)
+
+    // set vnode.el to root element for directive hooks
+    if (vnode.dirs) {
+      const rootEl = getRootElement(instance)
+      if (rootEl) {
+        vnode.el = rootEl
+      }
+    }
+
     simpleSetCurrentInstance(prev)
     return instance
   },
@@ -162,8 +172,18 @@ const vaporInteropImpl: Omit<
   update(n1, n2, shouldUpdate) {
     n2.component = n1.component
     n2.el = n2.anchor = n1.anchor
+
+    const instance = n2.component as any as VaporComponentInstance
+
+    // update vnode.el to root element for directive hooks
+    if (n2.dirs) {
+      const rootEl = getRootElement(instance)
+      if (rootEl) {
+        n2.el = rootEl
+      }
+    }
+
     if (shouldUpdate) {
-      const instance = n2.component as any as VaporComponentInstance
       instance.rawPropsRef!.value = n2.props
       instance.rawSlotsRef!.value = n2.children
     }

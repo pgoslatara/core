@@ -1,6 +1,7 @@
 import {
   KeepAlive,
   type ShallowRef,
+  createApp,
   createVNode,
   defineComponent,
   h,
@@ -19,6 +20,8 @@ import {
   toDisplayString,
   useModel,
   useTemplateRef,
+  vShow,
+  withDirectives,
 } from '@vue/runtime-dom'
 import { makeInteropRender } from './_utils'
 import {
@@ -34,6 +37,7 @@ import {
   renderEffect,
   setText,
   template,
+  vaporInteropPlugin,
 } from '../src'
 
 const define = makeInteropRender()
@@ -230,7 +234,7 @@ describe('vdomInterop', () => {
     })
   })
 
-  describe('v-show', () => {
+  describe('directives', () => {
     test('apply v-show to vdom child', async () => {
       const VDomChild = {
         setup() {
@@ -258,6 +262,174 @@ describe('vdomInterop', () => {
       show.value = true
       await nextTick()
       expect(html()).toBe('<div style=""></div>')
+    })
+
+    test('apply v-show to vapor child', async () => {
+      const VaporChild = defineVaporComponent({
+        setup() {
+          return template('<div></div>', true)()
+        },
+      })
+
+      const show = ref(false)
+      const App = defineComponent({
+        setup() {
+          return () =>
+            h('div', null, [
+              withDirectives(h(VaporChild as any), [[vShow, show.value]]),
+            ])
+        },
+      })
+
+      const root = document.createElement('div')
+      const app = createApp(App)
+      app.use(vaporInteropPlugin)
+      app.mount(root)
+
+      expect(root.innerHTML).toBe(
+        '<div><div style="display: none;"></div></div>',
+      )
+
+      show.value = true
+      await nextTick()
+      expect(root.innerHTML).toBe('<div><div style=""></div></div>')
+    })
+
+    test('apply custom directive to vapor child', async () => {
+      const calls: Array<{
+        hook: string
+        el: Element | null
+        value: any
+        oldValue: any
+      }> = []
+
+      const vCustom = {
+        created: (el: Element, binding: any) =>
+          calls.push({
+            hook: 'created',
+            el,
+            value: binding.value,
+            oldValue: binding.oldValue,
+          }),
+        beforeMount: (el: Element, binding: any) =>
+          calls.push({
+            hook: 'beforeMount',
+            el,
+            value: binding.value,
+            oldValue: binding.oldValue,
+          }),
+        mounted: (el: Element, binding: any) =>
+          calls.push({
+            hook: 'mounted',
+            el,
+            value: binding.value,
+            oldValue: binding.oldValue,
+          }),
+        beforeUpdate: (el: Element, binding: any) =>
+          calls.push({
+            hook: 'beforeUpdate',
+            el,
+            value: binding.value,
+            oldValue: binding.oldValue,
+          }),
+        updated: (el: Element, binding: any) =>
+          calls.push({
+            hook: 'updated',
+            el,
+            value: binding.value,
+            oldValue: binding.oldValue,
+          }),
+        beforeUnmount: (el: Element, binding: any) =>
+          calls.push({
+            hook: 'beforeUnmount',
+            el,
+            value: binding.value,
+            oldValue: binding.oldValue,
+          }),
+        unmounted: (el: Element, binding: any) =>
+          calls.push({
+            hook: 'unmounted',
+            el,
+            value: binding.value,
+            oldValue: binding.oldValue,
+          }),
+      }
+
+      const VaporChild = defineVaporComponent({
+        setup() {
+          return template('<div></div>', true)()
+        },
+      })
+
+      const count = ref(0)
+      const App = defineComponent({
+        setup() {
+          return () =>
+            h('div', null, [
+              withDirectives(h(VaporChild as any), [[vCustom, count.value]]),
+            ])
+        },
+      })
+
+      const root = document.createElement('div')
+      const app = createApp(App)
+      app.use(vaporInteropPlugin)
+      app.mount(root)
+
+      // root > div (App root) > div (VaporChild root)
+      const el = root.querySelector('div')!.querySelector('div')!
+      expect(calls.length).toBe(3)
+      expect(calls[0]).toEqual({
+        hook: 'created',
+        el,
+        value: 0,
+        oldValue: undefined,
+      })
+      expect(calls[1]).toEqual({
+        hook: 'beforeMount',
+        el,
+        value: 0,
+        oldValue: undefined,
+      })
+      expect(calls[2]).toEqual({
+        hook: 'mounted',
+        el,
+        value: 0,
+        oldValue: undefined,
+      })
+
+      calls.length = 0
+      count.value++
+      await nextTick()
+      expect(calls.length).toBe(2)
+      expect(calls[0]).toEqual({
+        hook: 'beforeUpdate',
+        el,
+        value: 1,
+        oldValue: 0,
+      })
+      expect(calls[1]).toEqual({
+        hook: 'updated',
+        el,
+        value: 1,
+        oldValue: 0,
+      })
+
+      calls.length = 0
+      app.unmount()
+      expect(calls.length).toBe(2)
+      expect(calls[0]).toEqual({
+        hook: 'beforeUnmount',
+        el,
+        value: 1,
+        oldValue: 0, // oldValue is preserved from the last update
+      })
+      expect(calls[1]).toEqual({
+        hook: 'unmounted',
+        el,
+        value: 1,
+        oldValue: 0, // oldValue is preserved from the last update
+      })
     })
   })
 

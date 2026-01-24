@@ -1206,6 +1206,7 @@ function baseCreateRenderer(
     n2.slotScopeIds = slotScopeIds
 
     if ((n2.type as ConcreteComponent).__vapor) {
+      const { dirs } = n2
       if (n1 == null) {
         if (n2.shapeFlag & ShapeFlags.COMPONENT_KEPT_ALIVE) {
           getVaporInterface(parentComponent, n2).activate(
@@ -1222,6 +1223,16 @@ function baseCreateRenderer(
             parentComponent,
             parentSuspense,
           )
+          // invoke directive hooks after mount so vnode.el is set
+          if (dirs) {
+            invokeDirectiveHook(n2, null, parentComponent, 'created')
+            invokeDirectiveHook(n2, null, parentComponent, 'beforeMount')
+            queuePostRenderEffect(
+              () => invokeDirectiveHook(n2, null, parentComponent, 'mounted'),
+              undefined,
+              parentSuspense,
+            )
+          }
         }
       } else {
         getVaporInterface(parentComponent, n2).update(
@@ -1229,6 +1240,15 @@ function baseCreateRenderer(
           n2,
           shouldUpdateComponent(n1, n2, optimized),
         )
+        // invoke directive hooks after update so vnode.el is set
+        if (dirs) {
+          invokeDirectiveHook(n2, n1, parentComponent, 'beforeUpdate')
+          queuePostRenderEffect(
+            () => invokeDirectiveHook(n2, n1, parentComponent, 'updated'),
+            undefined,
+            parentSuspense,
+          )
+        }
       }
     } else if (n1 == null) {
       if (n2.shapeFlag & ShapeFlags.COMPONENT_KEPT_ALIVE) {
@@ -2359,7 +2379,19 @@ function baseCreateRenderer(
 
     if (shapeFlag & ShapeFlags.COMPONENT) {
       if (isVaporComponent(type as ConcreteComponent)) {
+        // invoke directive hooks for vapor components
+        if (dirs) {
+          invokeDirectiveHook(vnode, null, parentComponent, 'beforeUnmount')
+        }
         getVaporInterface(parentComponent, vnode).unmount(vnode, doRemove)
+        if (dirs) {
+          queuePostRenderEffect(
+            () =>
+              invokeDirectiveHook(vnode, null, parentComponent, 'unmounted'),
+            undefined,
+            parentSuspense,
+          )
+        }
         return
       } else {
         unmountComponent(vnode.component!, parentSuspense, doRemove)
